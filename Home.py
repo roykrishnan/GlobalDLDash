@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 from datetime import datetime, date, timedelta
-from streamlit_extras.app_logo import add_logo
 
 # Mock data generation
 def generate_mock_data(num_players=50, num_days=365):
@@ -20,14 +19,10 @@ def generate_mock_data(num_players=50, num_days=365):
                 'bat_speed': np.random.normal(70, 5),
                 'top_8th_ev': np.random.normal(95, 3),
                 'expected_velo': np.random.normal(92, 3),
-                'rate_of_force_production': np.random.normal(1000, 100),
-                'best_rotational_force_increase': np.random.normal(50, 10),
-                'best_linear_force_increase': np.random.normal(40, 8),
-                'best_total_force_increase': np.random.normal(90, 15),
                 'throwing_velo': np.random.normal(85, 5),
                 'actively_hurt': np.random.choice([True, False], p=[0.05, 0.95]),
                 'total_injuries': np.random.randint(0, 3),
-                'gym': np.random.choice(['WA', 'AZ', 'FL', 'Remote']),
+                'location': np.random.choice(['In-gym', 'Remote']),
                 'workout_type': np.random.choice(['mocap', 'pen', 'hybrid A', 'hybrid B', 'recovery', 'Live At-Bats', 'In-Game Collection'])
             })
     
@@ -37,134 +32,166 @@ def generate_mock_data(num_players=50, num_days=365):
 
 # Time period selection
 def select_time_period(df):
-    col1, col2, col3, col4 = st.columns(4)
-    
     end_date = df['date'].max().date()
     
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        last_30 = st.button("Last 30 days")
+        if st.button("Last 30 days", key="btn_30_days"):
+            start_date = end_date - timedelta(days=30)
+            return start_date, end_date, "Last 30 days"
     with col2:
-        last_90 = st.button("Last 90 days")
+        if st.button("Last 90 days", key="btn_90_days"):
+            start_date = end_date - timedelta(days=90)
+            return start_date, end_date, "Last 90 days"
     with col3:
-        vs_previous = st.button("vs. Previous Period")
+        if st.button("vs. Previous Period", key="btn_prev_period"):
+            start_date = end_date - timedelta(days=60)
+            return start_date, end_date, "vs. Previous Period"
     with col4:
-        vs_year = st.button("vs. Previous Year")
+        if st.button("vs. Previous Year", key="btn_prev_year"):
+            start_date = end_date - timedelta(days=365)
+            return start_date, end_date, "vs. Previous Year"
     
-    if last_30:
-        start_date = end_date - timedelta(days=30)
-        selected_period = "Last 30 days"
-    elif last_90:
-        start_date = end_date - timedelta(days=90)
-        selected_period = "Last 90 days"
-    elif vs_previous:
-        start_date = end_date - timedelta(days=60)
-        selected_period = "vs. Previous Period"
-    elif vs_year:
-        start_date = end_date - timedelta(days=365)
-        selected_period = "vs. Previous Year"
-    else:
-        start_date = end_date - timedelta(days=30)
-        selected_period = "Last 30 days"
-    
-    return start_date, end_date, selected_period
+    # Default to last 30 days if no button is clicked
+    start_date = end_date - timedelta(days=30)
+    return start_date, end_date, "Last 30 days"
 
 # Calculate changes in metrics
-def calculate_changes(df, start_date, end_date):
-    metrics = ['max_throwing_velo', 'bat_speed', 'top_8th_ev', 'expected_velo', 'rate_of_force_production',
-               'best_rotational_force_increase', 'best_linear_force_increase', 'best_total_force_increase',
-               'throwing_velo']
+def calculate_changes(df, start_date, end_date, location):
+    start_datetime = pd.to_datetime(start_date)
+    end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
     
-    start_values = df[df['date'].dt.date == start_date].groupby('player')[metrics].mean()
-    end_values = df[df['date'].dt.date == end_date].groupby('player')[metrics].mean()
+    df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & (df['location'] == location)]
+    
+    metrics = ['max_throwing_velo', 'bat_speed', 'top_8th_ev', 'expected_velo', 'throwing_velo']
+    
+    start_values = df_filtered[df_filtered['date'] == df_filtered['date'].min()].groupby('player')[metrics].mean()
+    end_values = df_filtered[df_filtered['date'] == df_filtered['date'].max()].groupby('player')[metrics].mean()
     
     changes = ((end_values - start_values) / start_values * 100).fillna(0)
     
     # Calculate injury rate change
-    start_injuries = df[df['date'].dt.date == start_date]['actively_hurt'].mean() * 100
-    end_injuries = df[df['date'].dt.date == end_date]['actively_hurt'].mean() * 100
+    start_injuries = df_filtered[df_filtered['date'] == df_filtered['date'].min()]['actively_hurt'].mean() * 100
+    end_injuries = df_filtered[df_filtered['date'] == df_filtered['date'].max()]['actively_hurt'].mean() * 100
     injury_rate_change = end_injuries - start_injuries
     
     changes['injury_rate'] = injury_rate_change
     
     return changes
 
-# Function to generate biggest movers table
-def generate_biggest_movers(df, start_date, end_date):
-    changes = calculate_changes(df, start_date, end_date)
+# Calculate KPIs
+def calculate_kpis(df, start_date, end_date, location):
+    start_datetime = pd.to_datetime(start_date)
+    end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
     
-    top_gainers = changes.mean().nlargest(5)
-    top_losers = changes.mean().nsmallest(5)
-    most_static = changes.mean().abs().nsmallest(5)
+    df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & (df['location'] == location)]
     
-    movers_data = pd.concat([
-        top_gainers.to_frame('Top Gainers'),
-        top_losers.to_frame('Top Losers'),
-        most_static.to_frame('Most Static')
-    ], axis=1)
+    high_intensity_workouts = ['mocap', 'pen', 'hybrid A']
     
-    return movers_data.fillna(0)
+    kpis = {
+        "Pitching": {
+            "Max Velo (High Intensity)": df_filtered[df_filtered['workout_type'].isin(high_intensity_workouts)]['max_throwing_velo'].max()
+        },
+        "Hitting": {
+            "Bat Speed": df_filtered['bat_speed'].mean(),
+            "Top 8th EV": df_filtered['top_8th_ev'].mean()
+        },
+        "HP": {
+            "Expected Velo": df_filtered['expected_velo'].mean()
+        },
+        "Academy": {
+            "Expected Velo": df_filtered['expected_velo'].mean(),
+            "Throwing Velo": df_filtered['throwing_velo'].mean(),
+            "Bat Speed": df_filtered['bat_speed'].mean()
+        },
+        "Injury Tracker": {
+            "Active DL": df_filtered['actively_hurt'].mean() * 100,
+            "Total Injuries": df_filtered['total_injuries'].sum(),
+            "Total Players": df_filtered['total'].iloc[0]
+        }
+    }
+    
+    return kpis
 
 # Main dashboard
 def main_dashboard(df):
-    st.title("Athlete KPI Dashboard")
+    st.title("Athlete KPI Summary KPI Dashboard")
 
-    # Expander with explanations
-    with st.expander("Dashboard Explanation"):
-        st.write("""
-        This dashboard provides an overview of athlete performance metrics:
-        - **Top Improved Variables**: Metrics that have shown the most positive change.
-        - **Most Depreciated Variables**: Metrics that have declined the most.
-        - **Most Static Variables**: Metrics that have changed the least.
-        - **Biggest Movers**: A detailed view of the metrics with the most significant changes.
-        
-        The pages to the right provide deeper dives by department to view recent improvements/limitations. 
-        """)
+    # Sidebar
+    st.sidebar.title("Filters")
+    location = st.sidebar.selectbox("Location", ["In-gym", "Remote"])
+
+    # Initialize session state for date range if not exists
+    if 'start_date' not in st.session_state or 'end_date' not in st.session_state or 'selected_period' not in st.session_state:
+        st.session_state.start_date, st.session_state.end_date, st.session_state.selected_period = select_time_period(df)
 
     # Time period selection
-    start_date, end_date, selected_period = select_time_period(df)
+    new_start_date, new_end_date, new_selected_period = select_time_period(df)
+    
+    # Update session state if a new period is selected
+    if new_selected_period != st.session_state.selected_period:
+        st.session_state.start_date = new_start_date
+        st.session_state.end_date = new_end_date
+        st.session_state.selected_period = new_selected_period
 
-    # Calculate changes
-    all_changes = calculate_changes(df, start_date, end_date)
+    st.write(f"Selected period: {st.session_state.selected_period}")
+
+    # Calculate changes and KPIs based on the selected period
+    changes = calculate_changes(df, st.session_state.start_date, st.session_state.end_date, location)
+    kpis = calculate_kpis(df, st.session_state.start_date, st.session_state.end_date, location)
 
     # Display top improved, depreciated, and static variables
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.subheader("Top Improved Variables")
-        st.table(all_changes.mean().nlargest(3).round(2))
+        top_improved = changes.mean().nlargest(3).reset_index()
+        top_improved.columns = ['Metric', 'Change']
+        st.dataframe(top_improved, hide_index=True, use_container_width=True)
 
     with col2:
         st.subheader("Most Depreciated Variables")
-        st.table(all_changes.mean().nsmallest(3).round(2))
+        most_depreciated = changes.mean().nsmallest(3).reset_index()
+        most_depreciated.columns = ['Metric', 'Change']
+        st.dataframe(most_depreciated, hide_index=True, use_container_width=True)
 
     with col3:
         st.subheader("Most Static Variables")
-        st.table(all_changes.mean().abs().nsmallest(3).round(2))
+        most_static = changes.mean().abs().nsmallest(3).reset_index()
+        most_static.columns = ['Metric', 'Change']
+        st.dataframe(most_static, hide_index=True, use_container_width=True)
 
-    # Generate and display biggest movers table
-    st.subheader("Biggest Movers")
-    biggest_movers = generate_biggest_movers(df, start_date, end_date)
-    
-    # Convert the biggest_movers DataFrame to long format for easier plotting
-    biggest_movers_long = biggest_movers.reset_index().melt(id_vars='index', var_name='Category', value_name='Change')
-    biggest_movers_long = biggest_movers_long.rename(columns={'index': 'Metric'})
+    # Display KPIs in expandable sections
+    for category, metrics in kpis.items():
+        with st.expander(f"{category} KPIs"):
+            cols = st.columns(len(metrics))
+            for i, (metric_name, value) in enumerate(metrics.items()):
+                with cols[i]:
+                    st.metric(metric_name, f"{value:.2f}")
 
-    # Create a grouped bar chart
-    fig = px.bar(biggest_movers_long, x='Metric', y='Change', color='Category', barmode='group',
-                 title="Biggest Movers by Category",
-                 labels={'Metric': 'Performance Metric', 'Change': 'Percentage Change'},
-                 height=500)
-    st.plotly_chart(fig)
+    # Injury Tracker Charts
+    with st.expander("Injury Tracker Charts"):
+        injury_data = kpis["Injury Tracker"]
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = px.pie(values=[injury_data["Active DL"], 100 - injury_data["Active DL"]], 
+                         names=["Active DL", "Healthy"], 
+                         title="Active DL vs Healthy Players")
+            st.plotly_chart(fig)
 
-    # Display the table
-    st.table(biggest_movers.round(2))
+        with col2:
+            fig = px.bar(x=["Total Injuries", "Total Players"], 
+                         y=[injury_data["Total Injuries"], injury_data["Total Players"]],
+                         labels={"x": "Category", "y": "Count"},
+                         title="Total Injuries vs Total Players")
+            st.plotly_chart(fig)
 
 # Main app
 def main():
-    st.set_page_config(page_title="Athlete KPI Dashboard", layout="wide")
-
-    # Add logo to the sidebar
-    st.sidebar.image("images/logo.png")
+    st.set_page_config(page_title="Athlete Summary KPI Dashboard", layout="wide")
     
     # Generate mock data
     df = generate_mock_data()
