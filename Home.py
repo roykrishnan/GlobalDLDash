@@ -36,26 +36,17 @@ def select_time_period(df):
     
     col1, col2, col3, col4 = st.columns(4)
     
-    with col1:
-        if st.button("Last 30 days", key="btn_30_days"):
-            start_date = end_date - timedelta(days=30)
-            return start_date, end_date, "Last 30 days"
-    with col2:
-        if st.button("Last 90 days", key="btn_90_days"):
-            start_date = end_date - timedelta(days=90)
-            return start_date, end_date, "Last 90 days"
-    with col3:
-        if st.button("vs. Previous Period", key="btn_prev_period"):
-            start_date = end_date - timedelta(days=60)
-            return start_date, end_date, "vs. Previous Period"
-    with col4:
-        if st.button("vs. Previous Year", key="btn_prev_year"):
-            start_date = end_date - timedelta(days=365)
-            return start_date, end_date, "vs. Previous Year"
+    if col1.button("Last 30 days", key="btn_30_days"):
+        return end_date - timedelta(days=30), end_date, "Last 30 days"
+    if col2.button("Last 90 days", key="btn_90_days"):
+        return end_date - timedelta(days=90), end_date, "Last 90 days"
+    if col3.button("vs. Previous Period", key="btn_prev_period"):
+        return end_date - timedelta(days=60), end_date, "vs. Previous Period"
+    if col4.button("vs. Previous Year", key="btn_prev_year"):
+        return end_date - timedelta(days=365), end_date, "vs. Previous Year"
     
-    # Default to last 30 days if no button is clicked
-    start_date = end_date - timedelta(days=30)
-    return start_date, end_date, "Last 30 days"
+    # Return current values if no button is clicked
+    return st.session_state.start_date, st.session_state.end_date, st.session_state.selected_period
 
 # Calculate changes in metrics
 def calculate_changes(df, start_date, end_date, location):
@@ -123,8 +114,12 @@ def main_dashboard(df):
     location = st.sidebar.selectbox("Location", ["In-gym", "Remote"])
 
     # Initialize session state for date range if not exists
-    if 'start_date' not in st.session_state or 'end_date' not in st.session_state or 'selected_period' not in st.session_state:
-        st.session_state.start_date, st.session_state.end_date, st.session_state.selected_period = select_time_period(df)
+    if 'start_date' not in st.session_state:
+        st.session_state.start_date = df['date'].max().date() - timedelta(days=30)
+    if 'end_date' not in st.session_state:
+        st.session_state.end_date = df['date'].max().date()
+    if 'selected_period' not in st.session_state:
+        st.session_state.selected_period = "Last 30 days"
 
     # Time period selection
     new_start_date, new_end_date, new_selected_period = select_time_period(df)
@@ -174,26 +169,21 @@ def main_dashboard(df):
     with st.expander("Injury Tracker Charts"):
         injury_data = kpis["Injury Tracker"]
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig = px.pie(values=[injury_data["Active DL"], 100 - injury_data["Active DL"]], 
-                         names=["Active DL", "Healthy"], 
-                         title="Active DL vs Healthy Players")
-            st.plotly_chart(fig)
+        fig = px.pie(values=[injury_data["Active DL"], 100 - injury_data["Active DL"]], 
+                names=["Active DL", "Healthy"], 
+                title="Active DL vs Healthy Players")
+        st.plotly_chart(fig)
 
-        with col2:
-            fig = px.bar(x=["Total Injuries", "Total Players"], 
-                         y=[injury_data["Total Injuries"], injury_data["Total Players"]],
-                         labels={"x": "Category", "y": "Count"},
-                         title="Total Injuries vs Total Players")
-            st.plotly_chart(fig)
+        fig = px.bar(x=["Total Injuries", "Total Players"], 
+                y=[injury_data["Total Injuries"], injury_data["Total Players"]],
+                labels={"x": "Category", "y": "Count"},
+                title="Total Injuries vs Total Players")
+        st.plotly_chart(fig)
 
 # Main app
 def main():
-    st.set_page_config(page_title="Athlete Summary KPI Dashboard", layout="wide")
-    # Add additional images to the sidebar
-    st.sidebar.image("images/logo.png")
+    st.set_page_config(page_title="Athlete KPI Dashboard", layout="wide")
+    
     # Generate mock data
     df = generate_mock_data()
     
