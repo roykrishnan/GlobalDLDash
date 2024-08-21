@@ -107,7 +107,7 @@ def calculate_kpis(df, start_date, end_date, location):
 
 # Main dashboard
 def main_dashboard(df):
-    st.title("Athlete KPI Summary KPI Dashboard")
+    st.title("Athlete KPI Summary Dashboard")
 
     # Sidebar
     st.sidebar.title("Filters")
