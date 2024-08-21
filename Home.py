@@ -183,7 +183,8 @@ def main_dashboard(df):
 # Main app
 def main():
     st.set_page_config(page_title="Athlete KPI Dashboard", layout="wide")
-    
+    # Add additional images to the sidebar
+    st.sidebar.image("images/logo.png")
     # Generate mock data
     df = generate_mock_data()
     
