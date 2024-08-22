@@ -31,10 +31,10 @@ def generate_mock_data(num_players=50, num_days=365):
     df['total'] = len(players)  # Total number of players
     return df
 
-# Calculate changes in metrics
+# Calculate changes in metrics for a specific time period
 def calculate_changes(df, start_date, end_date, location, level):
     start_datetime = pd.to_datetime(start_date)
-    end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    end_datetime = pd.to_datetime(end_date)
     
     df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & 
                      (df['location'] == location) & (df['level'] == level)]
@@ -58,7 +58,7 @@ def calculate_changes(df, start_date, end_date, location, level):
 # Calculate KPIs
 def calculate_kpis(df, start_date, end_date, location, level):
     start_datetime = pd.to_datetime(start_date)
-    end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    end_datetime = pd.to_datetime(end_date)
     
     df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & 
                      (df['location'] == location) & (df['level'] == level)]
@@ -90,24 +90,9 @@ def calculate_kpis(df, start_date, end_date, location, level):
     
     return kpis
 
-# Main dashboard
-def main_dashboard(df):
-    st.title("Athlete KPI Summary Dashboard")
-
-    # Sidebar
-    st.sidebar.title("Filters")
-    location = st.sidebar.selectbox("Location", ["In-gym", "Remote"])
-    level = st.sidebar.selectbox("Level", ["Youth", "High School", "College", "Professional"])
-
-    # Date range selection
-    start_date = st.sidebar.date_input("Start Date", df['date'].min().date())
-    end_date = st.sidebar.date_input("End Date", df['date'].max().date())
-
-    # Calculate changes and KPIs based on the selected filters
-    changes = calculate_changes(df, start_date, end_date, location, level)
-    kpis = calculate_kpis(df, start_date, end_date, location, level)
-
-    # Display top improved, depreciated, and static variables
+# Display changes for a specific time period
+def display_changes(changes, title):
+    st.subheader(title)
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -127,6 +112,37 @@ def main_dashboard(df):
         most_static = changes.mean().abs().nsmallest(3).reset_index()
         most_static.columns = ['Metric', 'Change']
         st.dataframe(most_static, hide_index=True, use_container_width=True)
+
+# Main dashboard
+def main_dashboard(df):
+    st.title("Athlete KPI Summary Dashboard")
+
+    # Sidebar
+    st.sidebar.title("Filters")
+    location = st.sidebar.selectbox("Location", ["In-gym", "Remote"])
+    level = st.sidebar.selectbox("Level", ["Youth", "High School", "College", "Professional"])
+
+    # Calculate end date (today) and start dates for different periods
+    end_date = df['date'].max().date()
+    start_date_30d = end_date - timedelta(days=30)
+    start_date_90d = end_date - timedelta(days=90)
+    start_date_prev_period = end_date - timedelta(days=60)
+    start_date_prev_year = end_date - timedelta(days=365)
+
+    # Calculate changes for different time periods
+    changes_30d = calculate_changes(df, start_date_30d, end_date, location, level)
+    changes_90d = calculate_changes(df, start_date_90d, end_date, location, level)
+    changes_prev_period = calculate_changes(df, start_date_prev_period, end_date, location, level)
+    changes_prev_year = calculate_changes(df, start_date_prev_year, end_date, location, level)
+
+    # Display changes for all time periods
+    display_changes(changes_30d, "Last 30 Days")
+    display_changes(changes_90d, "Last 90 Days")
+    display_changes(changes_prev_period, "vs. Previous Period (60 days)")
+    display_changes(changes_prev_year, "vs. Previous Year")
+
+    # Calculate and display KPIs (using the 30-day period as default)
+    kpis = calculate_kpis(df, start_date_30d, end_date, location, level)
 
     # Display KPIs in expandable sections
     for category, metrics in kpis.items():
