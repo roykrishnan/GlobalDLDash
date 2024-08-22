@@ -23,6 +23,7 @@ def generate_mock_data(num_players=50, num_days=365):
                 'actively_hurt': np.random.choice([True, False], p=[0.05, 0.95]),
                 'total_injuries': np.random.randint(0, 3),
                 'location': np.random.choice(['In-gym', 'Remote']),
+                'level': np.random.choice(['Youth', 'High School', 'College', 'Professional']),
                 'workout_type': np.random.choice(['mocap', 'pen', 'hybrid A', 'hybrid B', 'recovery', 'Live At-Bats', 'In-Game Collection'])
             })
     
@@ -30,30 +31,13 @@ def generate_mock_data(num_players=50, num_days=365):
     df['total'] = len(players)  # Total number of players
     return df
 
-# Time period selection
-def select_time_period(df):
-    end_date = df['date'].max().date()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    if col1.button("Last 30 days", key="btn_30_days"):
-        return end_date - timedelta(days=30), end_date, "Last 30 days"
-    if col2.button("Last 90 days", key="btn_90_days"):
-        return end_date - timedelta(days=90), end_date, "Last 90 days"
-    if col3.button("vs. Previous Period", key="btn_prev_period"):
-        return end_date - timedelta(days=60), end_date, "vs. Previous Period"
-    if col4.button("vs. Previous Year", key="btn_prev_year"):
-        return end_date - timedelta(days=365), end_date, "vs. Previous Year"
-    
-    # Return current values if no button is clicked
-    return st.session_state.start_date, st.session_state.end_date, st.session_state.selected_period
-
 # Calculate changes in metrics
-def calculate_changes(df, start_date, end_date, location):
+def calculate_changes(df, start_date, end_date, location, level):
     start_datetime = pd.to_datetime(start_date)
     end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
     
-    df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & (df['location'] == location)]
+    df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & 
+                     (df['location'] == location) & (df['level'] == level)]
     
     metrics = ['max_throwing_velo', 'bat_speed', 'top_8th_ev', 'expected_velo', 'throwing_velo']
     
@@ -72,11 +56,12 @@ def calculate_changes(df, start_date, end_date, location):
     return changes
 
 # Calculate KPIs
-def calculate_kpis(df, start_date, end_date, location):
+def calculate_kpis(df, start_date, end_date, location, level):
     start_datetime = pd.to_datetime(start_date)
     end_datetime = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
     
-    df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & (df['location'] == location)]
+    df_filtered = df[(df['date'] >= start_datetime) & (df['date'] <= end_datetime) & 
+                     (df['location'] == location) & (df['level'] == level)]
     
     high_intensity_workouts = ['mocap', 'pen', 'hybrid A']
     
@@ -112,29 +97,15 @@ def main_dashboard(df):
     # Sidebar
     st.sidebar.title("Filters")
     location = st.sidebar.selectbox("Location", ["In-gym", "Remote"])
+    level = st.sidebar.selectbox("Level", ["Youth", "High School", "College", "Professional"])
 
-    # Initialize session state for date range if not exists
-    if 'start_date' not in st.session_state:
-        st.session_state.start_date = df['date'].max().date() - timedelta(days=30)
-    if 'end_date' not in st.session_state:
-        st.session_state.end_date = df['date'].max().date()
-    if 'selected_period' not in st.session_state:
-        st.session_state.selected_period = "Last 30 days"
+    # Date range selection
+    start_date = st.sidebar.date_input("Start Date", df['date'].min().date())
+    end_date = st.sidebar.date_input("End Date", df['date'].max().date())
 
-    # Time period selection
-    new_start_date, new_end_date, new_selected_period = select_time_period(df)
-    
-    # Update session state if a new period is selected
-    if new_selected_period != st.session_state.selected_period:
-        st.session_state.start_date = new_start_date
-        st.session_state.end_date = new_end_date
-        st.session_state.selected_period = new_selected_period
-
-    st.write(f"Selected period: {st.session_state.selected_period}")
-
-    # Calculate changes and KPIs based on the selected period
-    changes = calculate_changes(df, st.session_state.start_date, st.session_state.end_date, location)
-    kpis = calculate_kpis(df, st.session_state.start_date, st.session_state.end_date, location)
+    # Calculate changes and KPIs based on the selected filters
+    changes = calculate_changes(df, start_date, end_date, location, level)
+    kpis = calculate_kpis(df, start_date, end_date, location, level)
 
     # Display top improved, depreciated, and static variables
     col1, col2, col3 = st.columns(3)
