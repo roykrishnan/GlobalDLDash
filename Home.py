@@ -120,7 +120,7 @@ def main_dashboard(df):
     # Sidebar
     st.sidebar.title("Filters")
     location = st.sidebar.selectbox("Location", ["In-gym", "Remote"])
-    level = st.sidebar.selectbox("Level", ["Youth", "High School", "College", "Professional"])
+    level = st.sidebar.multiselect("Level", ["Youth", "High School", "College", "Professional"])
 
     # Calculate end date (today) and start dates for different periods
     end_date = df['date'].max().date()
